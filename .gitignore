@@ -1,0 +1,39 @@
+# Dependências
+/node_modules
+.pnpm-store
+
+# Build do Next.js
+/.next
+/out
+
+# Build/empacotamento do Electron
+/dist
+/installer
+
+# Cache do Electron (o binário que você baixou na mão)
+/electron-cache
+/electron-dist
+
+# Variáveis de ambiente / segredos
+.env
+.env.local
+.env*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Sistema operacional
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
