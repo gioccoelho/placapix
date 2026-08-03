@@ -11,19 +11,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Archive, BadgeMinus, Eye, PlusCircle } from "lucide-react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { BadgeMinus, Eye, PlusCircle } from "lucide-react";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { Placa } from "@/lib/types";
 import PageToVizu from "./_components/page-to-vizu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { BrowserQRCodeReader } from "@zxing/browser";
 import QRCode from "qrcode";
 import { HistoricoDePlacas } from "./_components/history";
 import { GetPlacasCriadas } from "./_actions";
+import { parsePix } from "@/lib/parse-pix";
+import { Dropzone } from "./_components/dropzone";
 
 export type Placas = {
   placa: string;
@@ -32,7 +29,7 @@ export type Placas = {
 };
 
 export default function Home() {
-  const { control, handleSubmit, register, setValue } = useForm({
+  const { control, register, setValue } = useForm<Placa>({
     defaultValues: {
       fields: [
         {
@@ -40,21 +37,24 @@ export default function Home() {
           qrCodeText: "",
           name: "",
           key: "",
-          qtd: 0,
+          qtd: 1,
           solicitante: "",
         },
       ],
     },
   });
 
-  const [values, setValues] = React.useState<Placa | null>(null);
-
   const [placas, setPlacas] = React.useState<Placas[]>([]);
+  const [tamanho, setTamanho] = React.useState<"grande" | "pequena">("grande");
 
   const { fields, append, remove } = useFieldArray({
     control,
     name: "fields",
   });
+
+  // valores AO VIVO do formulario -> preview dinamico
+  const watchedFields = useWatch({ control, name: "fields" });
+  const livePlaca: Placa = { fields: watchedFields || [] };
 
   const handleFileChange = async (file: File, index: number) => {
     const reader = new FileReader();
@@ -62,30 +62,33 @@ export default function Home() {
     reader.onload = async () => {
       if (reader.result) {
         const imgUrl = reader.result.toString();
-        setValue(`fields.${index}.imgUrl`, imgUrl); // Salva a imagem como URL base64
+        setValue(`fields.${index}.imgUrl`, imgUrl);
 
-        // Tenta detectar o QR Code na imagem carregada
         try {
           const codeReader = new BrowserQRCodeReader();
           const result = await codeReader.decodeFromImageUrl(imgUrl);
 
           if (result) {
             const qrCodeContent = result.getText();
-            setValue(`fields.${index}.qrCodeText`, qrCodeContent); // Salva o texto do QR Code
+            setValue(`fields.${index}.qrCodeText`, qrCodeContent);
 
-            // Gerar o QR Code de volta em formato de imagem base64 a partir do texto do QR Code
+            // auto-preenche nome e chave a partir do proprio QR
+            const dados = parsePix(qrCodeContent);
+            if (dados.nome) setValue(`fields.${index}.name`, dados.nome);
+            if (dados.chave) setValue(`fields.${index}.key`, dados.chave);
+
             try {
-              const generatedQRCode = await QRCode.toDataURL(qrCodeContent); // Versão assíncrona
-              setValue(`fields.${index}.imgUrl`, generatedQRCode); // Atualiza a imagem com o QR Code gerado
+              const generatedQRCode = await QRCode.toDataURL(qrCodeContent);
+              setValue(`fields.${index}.imgUrl`, generatedQRCode);
             } catch (err) {
               console.error("Erro ao gerar QR Code:", err);
             }
           }
         } catch (error) {
-          console.error("QR Code não detectado:", error);
+          console.error("QR Code nao detectado:", error);
           setValue(
             `fields.${index}.qrCodeText`,
-            "QR Code inválido ou não encontrado."
+            "QR Code invalido ou nao encontrado.",
           );
         }
       }
@@ -96,17 +99,6 @@ export default function Home() {
 
   const handleRemove = (index: number) => {
     remove(index);
-    if (values) {
-      const updatedValues = {
-        ...values,
-        fields: values.fields.filter((_, i) => i !== index),
-      };
-      setValues(updatedValues);
-    }
-  };
-
-  const onSubmit = (data: Placa) => {
-    setValues(data);
   };
 
   const fetchPlacas = async () => {
@@ -119,38 +111,24 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="flex flex-row gap-6 items-center justify-center h-screen">
+    <div className="flex flex-row gap-6 items-center justify-center min-h-screen p-6">
       <Card>
         <CardHeader>
           <CardTitle>Placa Pix Sicoob Uberaba</CardTitle>
-          <CardDescription>Insira os valores nos campos abaixo</CardDescription>
+          <CardDescription>
+            Arraste a imagem do QR (ou clique para selecionar). Nome e chave sao
+            preenchidos automaticamente.
+          </CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="flex flex-col gap-4 justify-around">
-            {fields.map((field, index) => (
-              <div
-                key={field.id}
-                className="flex flex-row gap-2 justify-around"
-              >
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline">
-                      <Archive />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80">
-                    <Input
-                      type="file"
-                      required
-                      accept="image/*"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleFileChange(e.target.files[0], index);
-                        }
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
+        <CardContent className="flex flex-col gap-4 justify-around">
+          {fields.map((field, index) => (
+            <div
+              key={field.id}
+              className="flex flex-row gap-3 items-center rounded-xl border p-3"
+            >
+              <Dropzone onFile={(file) => handleFileChange(file, index)} />
+
+              <div className="flex flex-1 flex-col gap-2">
                 <Input
                   type="text"
                   required
@@ -163,36 +141,61 @@ export default function Home() {
                   placeholder="Chave Pix"
                   {...register(`fields.${index}.key`)}
                 />
-                <Input
-                  className="max-w-24"
-                  type="number"
-                  required
-                  placeholder="Qtd"
-                  defaultValue={0}
-                  {...register(`fields.${index}.qtd`)}
-                />
-                <Input
-                  type="text"
-                  required
-                  placeholder="Nome do Solicitante"
-                  {...register(`fields.${index}.solicitante`)}
-                />
-                <Button
-                  type="button"
-                  onClick={() => handleRemove(index)}
-                  variant={"destructive"}
-                >
-                  <BadgeMinus />
-                </Button>
+                <div className="flex flex-row gap-2">
+                  <Input
+                    className="max-w-24"
+                    type="number"
+                    required
+                    min={1}
+                    placeholder="Qtd"
+                    defaultValue={1}
+                    {...register(`fields.${index}.qtd`, {
+                      valueAsNumber: true,
+                      min: 1,
+                    })}
+                  />
+                  <Input
+                    type="text"
+                    required
+                    placeholder="Nome do Solicitante"
+                    {...register(`fields.${index}.solicitante`)}
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => handleRemove(index)}
+                    variant={"destructive"}
+                    size="icon"
+                  >
+                    <BadgeMinus />
+                  </Button>
+                </div>
               </div>
-            ))}
-          </CardContent>
-          <CardFooter className="flex flex-row gap-2">
-            <HistoricoDePlacas placas={placas} />
-            <Button type="submit" variant={"secondary"} className="w-full">
-              <Eye />
-              Vizualizar
+            </div>
+          ))}
+        </CardContent>
+        <CardFooter className="flex flex-col gap-3">
+          {/* Seletor de tamanho */}
+          <div className="flex flex-row gap-2 w-full justify-center">
+            <Button
+              type="button"
+              size="sm"
+              variant={tamanho === "grande" ? "default" : "outline"}
+              onClick={() => setTamanho("grande")}
+            >
+              Grande
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={tamanho === "pequena" ? "default" : "outline"}
+              onClick={() => setTamanho("pequena")}
+            >
+              Pequena
+            </Button>
+          </div>
+
+          <div className="flex flex-row gap-2 w-full">
+            <HistoricoDePlacas placas={placas} />
             <Button
               variant={"outline"}
               onClick={() =>
@@ -201,19 +204,25 @@ export default function Home() {
                   qrCodeText: "",
                   name: "",
                   key: "",
-                  qtd: 0,
+                  qtd: 1,
                   solicitante: "",
                 })
               }
               type="button"
-              className="w-24"
+              className="w-full"
             >
-              <PlusCircle /> Campos
+              <PlusCircle /> Adicionar campo
             </Button>
-          </CardFooter>
-        </form>
+          </div>
+        </CardFooter>
       </Card>
-      {values && <PageToVizu values={values} executeFetch={fetchPlacas} />}
+
+      {/* Preview dinamico: atualiza sozinho ao mudar qtd/tamanho/dados */}
+      <PageToVizu
+        values={livePlaca}
+        executeFetch={fetchPlacas}
+        tamanho={tamanho}
+      />
     </div>
   );
 }

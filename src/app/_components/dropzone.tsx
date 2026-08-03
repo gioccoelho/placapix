@@ -12,7 +12,7 @@ export function Dropzone({ onFile }: Props) {
   const [fileName, setFileName] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  const handle = (file?: File) => {
+  const handle = (file?: File | null) => {
     if (file) {
       setFileName(file.name);
       onFile(file);
@@ -32,12 +32,12 @@ export function Dropzone({ onFile }: Props) {
         setDragging(false);
         handle(e.dataTransfer.files?.[0]);
       }}
-      className={`flex flex-col items-center justify-center gap-1 px-3 py-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors min-w-[160px] ${
+      className={`flex flex-col items-center justify-center gap-1 px-3 py-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors min-w-[150px] ${
         dragging
           ? "border-primary bg-primary/10"
           : fileName
-          ? "border-green-500/60 bg-green-500/5"
-          : "border-muted-foreground/30 hover:border-primary/50"
+            ? "border-green-500/60 bg-green-500/5"
+            : "border-muted-foreground/30 hover:border-primary/50"
       }`}
     >
       {fileName ? (
@@ -51,7 +51,7 @@ export function Dropzone({ onFile }: Props) {
         <>
           <UploadCloud className="h-5 w-5 text-muted-foreground" />
           <span className="text-[11px] text-center text-muted-foreground leading-tight">
-            Arraste o PDF/imagem
+            Arraste o arquivo
             <br />
             ou clique para selecionar
           </span>
@@ -60,9 +60,9 @@ export function Dropzone({ onFile }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,image/*"
+        accept="image/*"
         className="hidden"
-        onChange={(e) => handle(e.target.files?.[0] || undefined)}
+        onChange={(e) => handle(e.target.files?.[0])}
       />
     </div>
   );

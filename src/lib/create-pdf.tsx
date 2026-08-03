@@ -6,29 +6,34 @@ export async function CreatePDF(
   values: Placa,
   onCreate: () => void,
   name: string,
+  size: "grande" | "pequena" = "grande",
 ) {
   const pdfDoc = await PDFDocument.create();
 
   const A4_WIDTH = 595.28;
   const A4_HEIGHT = 841.89;
 
-  const squareSize = 240;
-  const margin = 10; // Margem interna para espaçamento
-  const padding = 20;
+  // presets de tamanho
+  const PRESETS = {
+    grande: { squareSize: 240, columns: 2, rows: 3 }, // QR 192pt (original)
+    pequena: { squareSize: 168.75, columns: 3, rows: 4 }, // QR 135pt (igual ao exemplo)
+  };
+  const { squareSize, columns, rows } = PRESETS[size];
 
-  const columns = 2;
-  const rows = 3;
+  const margin = 10;
+  const padding = 20;
   const itemsPerPage = columns * rows;
 
   const horizontalSpace =
     (A4_WIDTH - columns * squareSize - padding * (columns - 1)) / 2;
 
-  const topStart = A4_HEIGHT - 20; // Margem superior ajustada
+  const topStart = A4_HEIGHT - 20;
 
-  // Expandir os campos com base na quantidade (qtd)
-  const allFields = values.fields.flatMap((field) =>
-    Array.from({ length: field.qtd }).map(() => field),
-  );
+  // qtd sempre no minimo 1
+  const allFields = values.fields.flatMap((field) => {
+    const qtd = Math.max(1, Number(field.qtd) || 1);
+    return Array.from({ length: qtd }).map(() => field);
+  });
 
   for (
     let pageIndex = 0;
@@ -46,7 +51,7 @@ export async function CreatePDF(
       const col = i % columns;
 
       const x = horizontalSpace + col * (squareSize + padding);
-      const y = topStart - row * (squareSize + padding); // Começa no topo e ajusta cada linha
+      const y = topStart - row * (squareSize + padding);
 
       // Desenhar o quadrado
       page.drawRectangle({
@@ -58,8 +63,8 @@ export async function CreatePDF(
         borderWidth: 3,
       });
 
-      // QR Code ajustado (tamanho menor para criar espaço para textos)
-      const qrCodeSize = squareSize * 0.8; // 80% do tamanho do quadrado
+      // QR Code (80% do quadrado)
+      const qrCodeSize = squareSize * 0.8;
 
       if (field.imgUrl) {
         const qrImageBytes = await fetch(field.imgUrl).then((res) =>
@@ -67,29 +72,27 @@ export async function CreatePDF(
         );
         const qrImage = await pdfDoc.embedPng(qrImageBytes);
 
-        // Centralizar o QR Code dentro do quadrado
         page.drawImage(qrImage, {
           x: x + (squareSize - qrCodeSize) / 2,
-          y: y - margin - qrCodeSize, // Posicionado no topo do quadrado
+          y: y - margin - qrCodeSize,
           width: qrCodeSize,
           height: qrCodeSize,
         });
       }
 
-      // Textos centralizados
-      const textSize = 10; // Tamanho do texto para ambos
-      const textYPosition = y - squareSize + margin + 35; // Posição base para textos
+      // Textos
+      const textSize = 10;
+      const textYPosition = y - squareSize + margin + 35;
 
       if (field.solicitante) {
         page.drawText(`Solicitante: ${field.solicitante}`, {
           x: x + squareSize / 20,
-          y: y + 5, // Acima do QR code com espaçamento de 0.5
+          y: y + 5,
           size: textSize,
           color: rgb(0, 0, 0),
         });
       }
 
-      // Desenhar o nome
       if (field.name) {
         page.drawText(`Nome: ${field.name}`, {
           x: x + squareSize / 20,
@@ -99,7 +102,6 @@ export async function CreatePDF(
         });
       }
 
-      // Desenhar a chave
       if (field.key) {
         page.drawText(`Chave: ${field.key}`, {
           x: x + squareSize / 20,
@@ -111,33 +113,29 @@ export async function CreatePDF(
     }
   }
 
-  // Salvar o PDF como um Uint8Array
+  // Salvar o PDF como Uint8Array
   const pdfBytes = await pdfDoc.save();
 
+  // Converter para base64 e salvar no historico
   let binaryString = "";
   for (let i = 0; i < pdfBytes.length; i++) {
     binaryString += String.fromCharCode(pdfBytes[i]);
   }
   const pdfBase64 = btoa(binaryString);
 
-  // Agora salve o PDF em Base64 no banco de dados usando o Prisma
-  const save = await SavePdfBase64(pdfBase64, name); // Salvar a string Base64
+  const save = await SavePdfBase64(pdfBase64, name);
 
   if (save) {
     onCreate();
   }
 
-  // ==========================================
-  // CORREÇÃO DO ERRO DE TIPO AQUI:
-  // ==========================================
-  // Reconvertemos a string binária em um Array comum aceito pelo TypeScript do Next 15
+  // Download
   const byteNumbers = new Array(pdfBytes.length);
   for (let i = 0; i < pdfBytes.length; i++) {
     byteNumbers[i] = pdfBytes[i];
   }
   const byteArray = new Uint8Array(byteNumbers);
 
-  // Agora passamos o byteArray purificado sem SharedArrayBuffer
   const blob = new Blob([byteArray], { type: "application/pdf" });
 
   const link = document.createElement("a");
