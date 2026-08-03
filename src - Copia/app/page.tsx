@@ -24,6 +24,7 @@ import { BrowserQRCodeReader } from "@zxing/browser";
 import QRCode from "qrcode";
 import { HistoricoDePlacas } from "./_components/history";
 import { GetPlacasCriadas } from "./_actions";
+import { parsePix } from "@/lib/parse-pix";
 
 export type Placas = {
   placa: string;
@@ -48,8 +49,8 @@ export default function Home() {
   });
 
   const [values, setValues] = React.useState<Placa | null>(null);
-
   const [placas, setPlacas] = React.useState<Placas[]>([]);
+  const [tamanho, setTamanho] = React.useState<"grande" | "pequena">("grande"); // 👈 seletor
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -62,21 +63,24 @@ export default function Home() {
     reader.onload = async () => {
       if (reader.result) {
         const imgUrl = reader.result.toString();
-        setValue(`fields.${index}.imgUrl`, imgUrl); // Salva a imagem como URL base64
+        setValue(`fields.${index}.imgUrl`, imgUrl);
 
-        // Tenta detectar o QR Code na imagem carregada
         try {
           const codeReader = new BrowserQRCodeReader();
           const result = await codeReader.decodeFromImageUrl(imgUrl);
 
           if (result) {
             const qrCodeContent = result.getText();
-            setValue(`fields.${index}.qrCodeText`, qrCodeContent); // Salva o texto do QR Code
+            setValue(`fields.${index}.qrCodeText`, qrCodeContent);
 
-            // Gerar o QR Code de volta em formato de imagem base64 a partir do texto do QR Code
+            // auto-preenche nome e chave a partir do próprio QR
+            const dados = parsePix(qrCodeContent);
+            if (dados.nome) setValue(`fields.${index}.name`, dados.nome);
+            if (dados.chave) setValue(`fields.${index}.key`, dados.chave);
+
             try {
-              const generatedQRCode = await QRCode.toDataURL(qrCodeContent); // Versão assíncrona
-              setValue(`fields.${index}.imgUrl`, generatedQRCode); // Atualiza a imagem com o QR Code gerado
+              const generatedQRCode = await QRCode.toDataURL(qrCodeContent);
+              setValue(`fields.${index}.imgUrl`, generatedQRCode);
             } catch (err) {
               console.error("Erro ao gerar QR Code:", err);
             }
@@ -187,33 +191,61 @@ export default function Home() {
               </div>
             ))}
           </CardContent>
-          <CardFooter className="flex flex-row gap-2">
-            <HistoricoDePlacas placas={placas} />
-            <Button type="submit" variant={"secondary"} className="w-full">
-              <Eye />
-              Vizualizar
-            </Button>
-            <Button
-              variant={"outline"}
-              onClick={() =>
-                append({
-                  imgUrl: "",
-                  qrCodeText: "",
-                  name: "",
-                  key: "",
-                  qtd: 0,
-                  solicitante: "",
-                })
-              }
-              type="button"
-              className="w-24"
-            >
-              <PlusCircle /> Campos
-            </Button>
+          <CardFooter className="flex flex-col gap-3">
+            {/* 👇 seletor de tamanho */}
+            <div className="flex flex-row gap-2 w-full justify-center">
+              <Button
+                type="button"
+                size="sm"
+                variant={tamanho === "grande" ? "default" : "outline"}
+                onClick={() => setTamanho("grande")}
+              >
+                Grande
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={tamanho === "pequena" ? "default" : "outline"}
+                onClick={() => setTamanho("pequena")}
+              >
+                Pequena
+              </Button>
+            </div>
+
+            <div className="flex flex-row gap-2 w-full">
+              <HistoricoDePlacas placas={placas} />
+              <Button type="submit" variant={"secondary"} className="w-full">
+                <Eye />
+                Vizualizar
+              </Button>
+              <Button
+                variant={"outline"}
+                onClick={() =>
+                  append({
+                    imgUrl: "",
+                    qrCodeText: "",
+                    name: "",
+                    key: "",
+                    qtd: 0,
+                    solicitante: "",
+                  })
+                }
+                type="button"
+                className="w-24"
+              >
+                <PlusCircle /> Campos
+              </Button>
+            </div>
           </CardFooter>
         </form>
       </Card>
-      {values && <PageToVizu values={values} executeFetch={fetchPlacas} />}
+      {values && (
+        <PageToVizu
+          values={values}
+          executeFetch={fetchPlacas}
+          tamanho={tamanho}
+        />
+      )}
     </div>
   );
 }
