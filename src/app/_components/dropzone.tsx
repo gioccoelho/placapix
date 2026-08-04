@@ -60,7 +60,7 @@ export function Dropzone({ onFile }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="application/pdf,image/*"
         className="hidden"
         onChange={(e) => handle(e.target.files?.[0])}
       />

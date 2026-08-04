@@ -15,8 +15,8 @@ export async function CreatePDF(
 
   // presets de tamanho
   const PRESETS = {
-    grande: { squareSize: 240, columns: 2, rows: 3 }, // QR 192pt (original)
-    pequena: { squareSize: 168.75, columns: 3, rows: 4 }, // QR 135pt (igual ao exemplo)
+    grande: { squareSize: 240, columns: 2, rows: 3 },
+    pequena: { squareSize: 168.75, columns: 3, rows: 4 },
   };
   const { squareSize, columns, rows } = PRESETS[size];
 
@@ -63,8 +63,15 @@ export async function CreatePDF(
         borderWidth: 3,
       });
 
-      // QR Code (80% do quadrado)
-      const qrCodeSize = squareSize * 0.8;
+      // Tamanhos proporcionais ao quadrado (escalam junto com grande/pequena)
+      const textSize = squareSize * 0.045; // ~10.8pt no grande, ~7.6pt no pequeno
+      const lineGap = textSize * 1.4;
+      const bottomTextArea = lineGap * 2 + margin; // espaco reservado p/ 2 linhas
+      const qrCodeSize = squareSize - margin * 2 - bottomTextArea;
+
+      // QR centralizado horizontalmente, no topo do quadrado
+      const qrTop = y - margin;
+      const qrBottom = qrTop - qrCodeSize;
 
       if (field.imgUrl) {
         const qrImageBytes = await fetch(field.imgUrl).then((res) =>
@@ -74,29 +81,21 @@ export async function CreatePDF(
 
         page.drawImage(qrImage, {
           x: x + (squareSize - qrCodeSize) / 2,
-          y: y - margin - qrCodeSize,
+          y: qrBottom,
           width: qrCodeSize,
           height: qrCodeSize,
         });
       }
 
-      // Textos
-      const textSize = 10;
-      const textYPosition = y - squareSize + margin + 35;
-
-      if (field.solicitante) {
-        page.drawText(`Solicitante: ${field.solicitante}`, {
-          x: x + squareSize / 20,
-          y: y + 5,
-          size: textSize,
-          color: rgb(0, 0, 0),
-        });
-      }
+      // Textos ancorados ABAIXO da base real do QR (nunca acavala)
+      const textX = x + margin;
+      const nomeY = qrBottom - lineGap;
+      const chaveY = nomeY - lineGap;
 
       if (field.name) {
         page.drawText(`Nome: ${field.name}`, {
-          x: x + squareSize / 20,
-          y: textYPosition - 15,
+          x: textX,
+          y: nomeY,
           size: textSize,
           color: rgb(0, 0, 0),
         });
@@ -104,9 +103,19 @@ export async function CreatePDF(
 
       if (field.key) {
         page.drawText(`Chave: ${field.key}`, {
-          x: x + squareSize / 20,
-          y: textYPosition - 30,
+          x: textX,
+          y: chaveY,
           size: textSize,
+          color: rgb(0, 0, 0),
+        });
+      }
+
+      // Solicitante acima do quadrado (fora da caixa)
+      if (field.solicitante) {
+        page.drawText(`Solicitante: ${field.solicitante}`, {
+          x: textX,
+          y: y + 4,
+          size: textSize * 0.85,
           color: rgb(0, 0, 0),
         });
       }

@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { BadgeMinus, Eye, PlusCircle } from "lucide-react";
+import { BadgeMinus, PlusCircle } from "lucide-react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import type { Placa } from "@/lib/types";
 import PageToVizu from "./_components/page-to-vizu";
@@ -21,6 +21,10 @@ import { HistoricoDePlacas } from "./_components/history";
 import { GetPlacasCriadas } from "./_actions";
 import { parsePix } from "@/lib/parse-pix";
 import { Dropzone } from "./_components/dropzone";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
+
+// worker do pdfjs servido de /public (funciona em dev e no exe)
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
 
 export type Placas = {
   placa: string;
@@ -56,44 +60,66 @@ export default function Home() {
   const watchedFields = useWatch({ control, name: "fields" });
   const livePlaca: Placa = { fields: watchedFields || [] };
 
-  const handleFileChange = async (file: File, index: number) => {
-    const reader = new FileReader();
+  // Le o QR (ZXing) + preenche Nome/Chave (parsePix) + REGENERA o QR limpo p/ o PDF.
+  // Usado tanto para imagem quanto para PDF -> garante que o QR va para o arquivo final.
+  const decodeQr = async (imgUrl: string, index: number) => {
+    try {
+      const codeReader = new BrowserQRCodeReader();
+      const result = await codeReader.decodeFromImageUrl(imgUrl);
 
+      if (result) {
+        const qrCodeContent = result.getText();
+        setValue(`fields.${index}.qrCodeText`, qrCodeContent);
+
+        const dados = parsePix(qrCodeContent);
+        if (dados.nome) setValue(`fields.${index}.name`, dados.nome);
+        if (dados.chave) setValue(`fields.${index}.key`, dados.chave);
+
+        // SEMPRE regenera o QR limpo (PNG) -> e ele que vai pro PDF final
+        const generatedQRCode = await QRCode.toDataURL(qrCodeContent);
+        setValue(`fields.${index}.imgUrl`, generatedQRCode);
+      }
+    } catch (error) {
+      console.error("QR Code nao detectado:", error);
+      setValue(
+        `fields.${index}.qrCodeText`,
+        "QR Code invalido ou nao encontrado.",
+      );
+    }
+  };
+
+  const handleFileChange = async (file: File, index: number) => {
+    // PDF: renderiza a 1a pagina num canvas e extrai como imagem
+    if (file.type === "application/pdf") {
+      try {
+        const buffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 3 }); // escala alta = QR nitido
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d")!;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        const imgUrl = canvas.toDataURL("image/png");
+        await decodeQr(imgUrl, index);
+      } catch (error) {
+        console.error("Erro ao ler o PDF:", error);
+        setValue(`fields.${index}.qrCodeText`, "Falha ao ler o PDF.");
+      }
+      return;
+    }
+
+    // Imagem: le direto
+    const reader = new FileReader();
     reader.onload = async () => {
       if (reader.result) {
-        const imgUrl = reader.result.toString();
-        setValue(`fields.${index}.imgUrl`, imgUrl);
-
-        try {
-          const codeReader = new BrowserQRCodeReader();
-          const result = await codeReader.decodeFromImageUrl(imgUrl);
-
-          if (result) {
-            const qrCodeContent = result.getText();
-            setValue(`fields.${index}.qrCodeText`, qrCodeContent);
-
-            // auto-preenche nome e chave a partir do proprio QR
-            const dados = parsePix(qrCodeContent);
-            if (dados.nome) setValue(`fields.${index}.name`, dados.nome);
-            if (dados.chave) setValue(`fields.${index}.key`, dados.chave);
-
-            try {
-              const generatedQRCode = await QRCode.toDataURL(qrCodeContent);
-              setValue(`fields.${index}.imgUrl`, generatedQRCode);
-            } catch (err) {
-              console.error("Erro ao gerar QR Code:", err);
-            }
-          }
-        } catch (error) {
-          console.error("QR Code nao detectado:", error);
-          setValue(
-            `fields.${index}.qrCodeText`,
-            "QR Code invalido ou nao encontrado.",
-          );
-        }
+        await decodeQr(reader.result.toString(), index);
       }
     };
-
     reader.readAsDataURL(file);
   };
 
@@ -116,8 +142,8 @@ export default function Home() {
         <CardHeader>
           <CardTitle>Placa Pix Sicoob Uberaba</CardTitle>
           <CardDescription>
-            Arraste a imagem do QR (ou clique para selecionar). Nome e chave sao
-            preenchidos automaticamente.
+            Arraste a imagem ou o PDF do QR (ou clique para selecionar). Nome e
+            chave sao preenchidos automaticamente.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 justify-around">
