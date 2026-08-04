@@ -49,7 +49,7 @@ export default function Home() {
   });
 
   const [placas, setPlacas] = React.useState<Placas[]>([]);
-  const [tamanho, setTamanho] = React.useState<"grande" | "pequena">("grande");
+  const [tamanho, setTamanho] = React.useState<"grande" | "pequena">("pequena");
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -123,6 +123,14 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
+  // limpa os dados do campo quando o usuario clica no X do dropzone
+  const handleClearFile = (index: number) => {
+    setValue(`fields.${index}.imgUrl`, "");
+    setValue(`fields.${index}.qrCodeText`, "");
+    setValue(`fields.${index}.name`, "");
+    setValue(`fields.${index}.key`, "");
+  };
+
   const handleRemove = (index: number) => {
     remove(index);
   };
@@ -152,7 +160,10 @@ export default function Home() {
               key={field.id}
               className="flex flex-row gap-3 items-center rounded-xl border p-3"
             >
-              <Dropzone onFile={(file) => handleFileChange(file, index)} />
+              <Dropzone
+                onFile={(file) => handleFileChange(file, index)}
+                onClear={() => handleClearFile(index)}
+              />
 
               <div className="flex flex-1 flex-col gap-2">
                 <Input
