@@ -21,6 +21,7 @@ import { HistoricoDePlacas } from "./_components/history";
 import { GetPlacasCriadas } from "./_actions";
 import { parsePix } from "@/lib/parse-pix";
 import { Dropzone } from "./_components/dropzone";
+// @ts-expect-error - pdfjs legacy nao tem tipos
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 
 // worker do pdfjs servido de /public (funciona em dev e no exe)
@@ -102,7 +103,7 @@ export default function Home() {
         canvas.width = viewport.width;
         canvas.height = viewport.height;
 
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        await page.render({ canvas, canvasContext: ctx, viewport }).promise;
 
         const imgUrl = canvas.toDataURL("image/png");
         await decodeQr(imgUrl, index);

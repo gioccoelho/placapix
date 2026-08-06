@@ -4,6 +4,7 @@ export interface Placa {
 
 interface Values {
   imgUrl: string;
+  qrCodeText: string;
   name: string;
   key: string;
   qtd: number;
